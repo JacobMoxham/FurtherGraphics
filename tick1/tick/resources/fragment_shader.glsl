@@ -13,7 +13,7 @@ in vec3 pos;
 out vec3 color;
 
 #define PI 3.1415926535897932384626433832795
-#define RENDER_DEPTH 50
+#define RENDER_DEPTH 800
 #define CLOSE_ENOUGH 0.00001
 
 #define BACKGROUND -1
@@ -42,13 +42,38 @@ vec3 getRayDir() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-
 float sphere(vec3 pt) {
-  return length(pt) - 1;
+  return length(pt) - 1.0;
+}
+float sphere(vec3 pt, float rad, vec3 pos) {
+  return length(pt - pos) - rad;
+}
+
+float cuboid(vec3 pt, vec3 dim, vec3 pos) {
+	//vec3 dim = vec3(1,1,1);
+	vec3 d = abs(pt - pos) - dim;
+	return min(max(d.x, max(d.y, d.z)), 0.0) + length(max(d, 0.0));
+}
+
+float smin(float a, float b){
+	float k = 0.2;
+	float h = clamp(0.5 + 0.5 * (b-a) /k, 0, 1);
+
+	return mix(b, a, h) - k * h * (1-h);
+}
+
+float minDist(vec3 pt){
+	vec3 cubeDim = vec3(1.0, 1.0, 1.0);
+	//SC stands for sphere cube
+	float unionSC =  min(sphere(pt, 1.0, vec3(-2,0,-2)), cuboid(pt, cubeDim, vec3(-3,0,-3)));
+	float differenceSC = max(- sphere(pt, 1.0, vec3(4,0,-2)), cuboid(pt, cubeDim, vec3(3,0,-3)));
+	float blendSC = smin(sphere(pt, 1.0, vec3(-2,0,4)), cuboid(pt, cubeDim, vec3(-3,0,3)));
+	float intersectionSC = max(sphere(pt, 1.0, vec3(4,0,4)), cuboid(pt, cubeDim, vec3(3,0,3)));
+	return min(unionSC, min(differenceSC, min(blendSC, intersectionSC)));
 }
 
 vec3 getNormal(vec3 pt) {
-  return normalize(GRADIENT(pt, sphere));
+  return normalize(GRADIENT(pt, minDist));
 }
 
 vec3 getColor(vec3 pt) {
@@ -83,8 +108,9 @@ vec3 raymarch(vec3 camPos, vec3 rayDir) {
   float t = 0;
 
   for (float d = 1000; step < RENDER_DEPTH && abs(d) > CLOSE_ENOUGH; t += abs(d)) {
-    d = sphere(camPos + t * rayDir);
-    step++;
+	vec3 pt = camPos + t * rayDir;
+	d = minDist(pt);
+	step++;
   }
 
   if (step == RENDER_DEPTH) {
